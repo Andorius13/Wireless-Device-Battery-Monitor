@@ -248,40 +248,6 @@ anywhere and run `BatteryHub.exe`.
 - **Tray-icon mode on Windows 11:** new tray icons go to the `^` overflow. Drag them onto the taskbar or enable them in *Settings → Personalization → Taskbar → Other system tray icons*.
 - **Keeping the app away from a device:** if a device misbehaves while the app is running, list it in the registry string `IgnoreDevices` under `HKCU\Software\WirelessBattery` as `VID:PID` pairs (hex, separated by commas, e.g. `28BD:0947, 1234:ABCD`; `--dump` shows the ids). The app then never opens it. Drawing tablets are skipped automatically.
 
-## Updates on Windows
-
-Official stable Windows builds check the project's latest published stable release in the
-background, 30 seconds after startup and then every 24 hours while the app is running. Open the
-menu to see **Update available: vX.Y.Z...**, or choose **Check for updates...** yourself.
-Update information appears only in this menu: battery icons, percentages and tooltips stay the
-same, and automatic checks never show a notification or dialog. Turn off
-**Automatically check for updates** in the menu to disable background checks.
-
-For an installed copy, click the update entry and **Download and install**. Nothing is installed
-without that click. The app downloads the release's `SHA256SUMS.txt` and its signature, checks the
-signature against the maintainer's public key built into the app, downloads the Windows installer,
-and runs it only if its SHA-256 is the one in the signed list (and the one GitHub lists for it). It
-then updates the existing installation. Settings and startup preference are
-preserved, and the app reopens after installation. An installation for all users can ask for
-administrator permission. **Release notes** opens the official release page; **Later** keeps
-your current version. Portable copies offer the release page for downloading the ZIP manually.
-
-Checks contact GitHub's public API without an account or token. No device or battery information
-is sent. Offline failures and GitHub rate limits leave battery monitoring running; a previously
-found release stays in the menu until a successful check supersedes it or it is installed.
-Cancelling a download waits for the current network operation to finish its finite timeout.
-The installer never restarts Windows automatically.
-
-**Why updates are safe to install:** the signing key never goes to GitHub. The maintainer signs
-each release's checksum list on their own PC (see [docs/releasing.md](docs/releasing.md)), so
-even someone who took over the GitHub account or its build workflow could not publish an update
-the app would install. A release without a valid signature is shown in the menu but can only be
-downloaded by hand. The signature does not replace Windows' own SmartScreen or UAC prompts.
-
-Install the first release containing this feature manually once. Development/test builds disable
-official update checks so local changes cannot be replaced accidentally. Updates for Linux and
-automatic replacement of portable copies are deferred.
-
 ## Command line
 
 ```
@@ -310,9 +276,8 @@ Adding new fields is backwards compatible.
 what will be sent (it is shown word for word: the device name, its type, its USB/HID ids and interface layout, and your optional
 name and notes) and click **Send**. It goes on the public list at [krisgfx.com/tools](https://krisgfx.com/tools/#requested) and
 opens or updates a GitHub issue. **Copy full report** puts the complete `--dump` on the clipboard for the issue.
-Report data is sent only when you click Send. Official Windows builds can also contact GitHub
-to check for updates, as described in [Updates on Windows](#updates-on-windows); update checks
-do not send device or battery information.
+Report data is sent only when you click Send. This fork has no auto-updater: the app never checks
+for or downloads updates.
 
 ## Build
 
@@ -321,9 +286,9 @@ You need [MinGW-w64](https://www.mingw-w64.org/), e.g. from [MSYS2](https://www.
 ```
 make                                      # development build, version 0.0.0
 build.bat                                 # plain cmd with g++ and windres on PATH
-make VERSION=1.2.3 CHANNEL=test            # versioned build, official updates disabled
+make VERSION=1.2.3 CHANNEL=test            # versioned build
 build.bat 1.2.3 test                       # equivalent versioned cmd build
-make test VERSION=1.2.3 CHANNEL=test       # device and updater regression tests
+make test VERSION=1.2.3 CHANNEL=test       # device regression tests
 ```
 
 To build the installer and portable zip, install [Inno Setup](https://jrsoftware.org/isinfo.php),
@@ -336,7 +301,7 @@ HeadsetControl source (as its GPL license requires).
 
 Windows builds also need PowerShell for generating the shared executable/resource version.
 The official repository's version tags build with `CHANNEL=stable`; local builds default to
-`dev`. Forks and pull requests do not enable official updates automatically.
+`dev`. The channel only labels the build; this fork contains no updater.
 
 `BatteryHub.exe` on its own also works. Without `headsetcontrol.exe` next to it (or on `PATH`) you
 just lose the extra headsets.

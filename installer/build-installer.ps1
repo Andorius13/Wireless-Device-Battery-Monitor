@@ -39,7 +39,7 @@ New-Item -ItemType Directory -Force $stage | Out-Null
 Copy-Item BatteryHub.exe, $hscExe, installer\THIRD_PARTY_NOTICES.txt $stage
 Copy-Item LICENSE (Join-Path $stage "LICENSE.txt")
 Compress-Archive -Path "$stage\*" -DestinationPath "dist\BatteryHub-$Version-portable.zip" -Force
-# Checksums of what the app can install or users download. The maintainer signs this file on their own
+# Checksums of the files users download, so they can check them by hand.
 # PC (scripts\sign-release.ps1) and uploads SHA256SUMS.txt.sig; the app only installs a signed setup.
 # sha256sum format with LF line ends, so `sha256sum -c SHA256SUMS.txt` also works.
 $sums = foreach ($name in "BatteryHub-Setup-$Version.exe", "BatteryHub-$Version-portable.zip") {

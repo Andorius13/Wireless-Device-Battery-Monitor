@@ -34,7 +34,7 @@ build/app_res.o: res/app.rc res/app.manifest res/app.ico res/app_light.ico build
 clean:
 	rm -rf build BatteryHub.exe
 
-test: test-update-core test-update-win test-update-signature
+test:
 	@mkdir -p build
 	$(CXX) -std=c++17 -O2 -Wall tests/device_aliases_test.cpp -o build/device_aliases_test.exe
 	./build/device_aliases_test.exe
@@ -115,22 +115,6 @@ test: test-update-core test-update-win test-update-signature
 	$(CXX) -std=c++17 -O2 -Wall tests/gamesir_ble_protocol_test.cpp -o build/gamesir_ble_protocol_test.exe
 	./build/gamesir_ble_protocol_test.exe
 
-test-update-core:
-	@mkdir -p build
-	$(CXX) -std=c++17 -O2 -Wall tests/update_core_test.cpp src/update_core.cpp -o build/update_core_test.exe
-	./build/update_core_test.exe
-
-test-update-signature: build/version.h
-	@mkdir -p build
-	$(CXX) -std=c++17 -O2 -Wall tests/update_signature_test.cpp src/update_signature.cpp -o build/update_signature_test.exe -lbcrypt
-	./build/update_signature_test.exe
-
-test-update-win: build/version.h build/app_res.o
-	@mkdir -p build
-	$(CXX) -std=c++17 -O2 -Wall tests/update_win_test.cpp src/update_core.cpp src/update_signature.cpp src/i18n.cpp build/app_res.o \
-	    -o build/update_win_test.exe -lwinhttp -lbcrypt -lcomctl32 -lversion -lole32
-	./build/update_win_test.exe
-
 FORCE:
 
-.PHONY: clean test test-update-core test-update-win test-update-signature FORCE
+.PHONY: clean test FORCE
