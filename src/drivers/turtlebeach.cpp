@@ -14,8 +14,15 @@
 // with the cable in on the Stealth 700 Gen 3 (HaloBattery #211), so it is left out.
 // 10F5:2262 ("Stealth 700PC Gen 3", issue #1413) has the same FF13:0001 62-byte collection on interface 3;
 // it is the PC version of the same headset and is read the same way (untested on hardware). The unconfirmed
-// transmitter 10F5:2250 and the other models of the family (Stealth 600 Gen 3, Atlas Air, Stealth Pro II,
-// which HaloBattery reads with different requests) are not enabled here.
+// transmitter 10F5:2250 and the other models of the family (Stealth 600 Gen 3, Atlas Air) are not enabled here.
+//
+// Stealth Pro II (10F5:2287 "Stealth Pro II PC" transmitter, tested here; 10F5:229B transmitter and 10F5:229E
+// headset cable from HaloBattery #173) has the same FF13:0001 collection but answers Swarm II's own record asks
+// instead of the CoAP tunnel: first the "SInf" session opener, then the "GSI" ask, both byte for byte from
+// HaloBattery's capture. The same GSI document comes back (240 = percent, 250 = charging on this model), split
+// into ~6 ms-apart frames that GetInputReport only sees while they are current, so the replies are polled
+// back to back and each frame is scanned on its own (on the 2287 the "240" pair always sits inside one frame).
+// Only these two record asks are ever sent; nothing on the headset is changed.
 #include "drivers.h"
 
 #include <cwctype>
@@ -29,6 +36,15 @@ struct Model { USHORT pid; bool cable; };
 const Model kModels[] = { { 0x2251, false },  // Stealth 700X Gen 3 transmitter (tested in HaloBattery)
                           { 0x2262, false },  // Stealth 700PC Gen 3 transmitter (#1413)
                           { 0x2253, true } };  // the headset on its own USB cable (tested in HaloBattery)
+const Model kProModels[] = { { 0x2287, false },  // Stealth Pro II PC transmitter (tested)
+                             { 0x229B, false },  // Stealth Pro II transmitter (HaloBattery #173)
+                             { 0x229E, true } };  // Stealth Pro II on its own USB cable (HaloBattery)
+
+// Swarm II's "SInf" session opener and "GSI" record ask (HaloBattery, capture packets 150 and 616).
+const BYTE kAskSinf[] = { 0x06, 0x18, 0x00, 0x05, 0x5A, 0x14, 0x00, 0x02, 0x99, 0x48, 0x01, 0xC0, 0x4A, 0x01,
+                          0, 0, 0, 0, 0, 0, 0, 0x61, 0x00, 0x53, 0x49, 0x6E, 0x66 };
+const BYTE kAskGsi[] = { 0x06, 0x18, 0x00, 0x05, 0x5A, 0x14, 0x00, 0x02, 0x99, 0x48, 0x01, 0x44, 0x14, 0x04,
+                         0, 0, 0, 0, 0, 0, 0, 0x61, 0x00, 0x53, 0x47, 0x53, 0x49 };
 
 bool Send(HidDev& d, std::initializer_list<BYTE> race) {
     std::vector<BYTE> buf(62, 0);
@@ -81,29 +97,70 @@ int ReadLevel(const HidColl& c) {
     return -1;
 }
 
-std::wstring ModelName(const HidColl& c) {
+// The number of `"<key>":"<digits>"` inside one frame's text, or -1 when the pair is not complete there.
+int FrameValue(const std::string& s, const char* key) {
+    const std::string k = std::string("\"") + key + "\":\"";
+    size_t p = s.find(k);
+    if (p == std::string::npos) return -1;
+    size_t q = p + k.size();
+    int v = 0, digits = 0;
+    while (q < s.size() && s[q] >= '0' && s[q] <= '9' && digits < 4) v = v * 10 + (s[q++] - '0'), digits++;
+    return (digits > 0 && q < s.size() && s[q] == '"') ? v : -1;
+}
+
+// Stealth Pro II: SInf opener, then the GSI ask; the replies are polled back to back for up to `ms` each.
+int ReadProLevel(const HidColl& c, bool& charging) {
+    HidDev d;
+    if (!d.Open(c)) return -1;
+    charging = false;
+    // The SInf dump may already carry the level; the GSI answer took up to ~1.1 s on the 2287.
+    const struct { const BYTE* data; size_t len; ULONGLONG waitMs; } asks[] = {
+        { kAskSinf, sizeof kAskSinf, 800 }, { kAskGsi, sizeof kAskGsi, 2500 } };
+    for (const auto& ask : asks) {
+        std::vector<BYTE> buf(ask.data, ask.data + ask.len);
+        buf.resize(62, 0);
+        if (!d.Write(buf)) return -1;
+        const ULONGLONG end = GetTickCount64() + ask.waitMs;
+        while (GetTickCount64() < end) {
+            std::vector<BYTE> r;
+            if (!d.GetInputReport(0x07, r) || r.size() < 4 || r[0] != 0x07 || r[1] == 0) continue;
+            size_t n = r[1];
+            if (n > r.size() - 3) n = r.size() - 3;
+            std::string frame((const char*)r.data() + 3, n);
+            int level = FrameValue(frame, "240");
+            if (level >= 0 && level <= 100) {
+                charging = FrameValue(frame, "250") == 1;
+                return level;
+            }
+        }
+    }
+    return -1;
+}
+
+std::wstring ModelName(const HidColl& c, const wchar_t* fallback) {
     std::wstring product = HidProduct(c);  // e.g. "Stealth 700X Gen 3"
-    if (product.empty()) return L"Turtle Beach Stealth 700 Gen 3";
+    if (product.empty()) return fallback;
     std::wstring lower = product;
     for (auto& ch : lower) ch = (wchar_t)towlower(ch);
     if (lower.compare(0, 12, L"turtle beach") != 0) product = L"Turtle Beach " + product;
     return product;
 }
 
-}  // namespace
-
-void PollTurtleBeach(PollContext& ctx) {
+// One headset family: transmitter(s) and cable are one entry, read through whichever answers first.
+template <size_t N>
+void PollFamily(PollContext& ctx, const Model (&models)[N], bool pro) {
     const HidColl* found = nullptr;
     const Model* foundModel = nullptr;
     int level = -1;
-    for (const Model& m : kModels) {
+    bool charging = false;
+    for (const Model& m : models) {
         if (ctx.IsClaimed(kVid, m.pid)) continue;
         auto colls = ctx.Find(kVid, m.pid, [](const HidColl& c) {
             return c.page() == 0xFF13 && c.usage() == 0x0001 && c.inLen() > 0 && c.outLen() > 0;
         });
         if (colls.empty()) continue;
         if (!found) found = colls[0], foundModel = &m;
-        level = ReadLevel(*colls[0]);
+        level = pro ? ReadProLevel(*colls[0], charging) : ReadLevel(*colls[0]);
         if (level >= 0) {
             found = colls[0];
             foundModel = &m;
@@ -112,15 +169,24 @@ void PollTurtleBeach(PollContext& ctx) {
     }
     if (!found) return;
     DeviceStatus s;
-    s.key = L"turtlebeach:stealth700";  // transmitter and cable are one headset
-    s.name = ModelName(*found);
+    s.key = pro ? L"turtlebeach:stealthpro2" : L"turtlebeach:stealth700";
+    s.name = ModelName(*found, pro ? L"Turtle Beach Stealth Pro II" : L"Turtle Beach Stealth 700 Gen 3");
     s.kind = DeviceKind::Headset;
     s.via = foundModel->cable ? L"USB cable" : L"2.4 GHz transmitter";
     s.graceSec = 300;
-    if (level < 0)
+    if (level < 0) {
         s.asleep = true;  // no record (headset off, or Swarm II holding the channel): keep the last value
-    else
+    } else {
         s.percent = level;
+        s.charging = charging;  // key 250 is the charging flag on the Pro II only (always false for the 700)
+    }
     ctx.Add(s, kVid, foundModel->pid);
-    for (const Model& o : kModels) ctx.Claim(kVid, o.pid);  // one entry for the headset
+    for (const Model& o : models) ctx.Claim(kVid, o.pid);  // one entry for the headset
+}
+
+}  // namespace
+
+void PollTurtleBeach(PollContext& ctx) {
+    PollFamily(ctx, kModels, false);
+    PollFamily(ctx, kProModels, true);
 }
