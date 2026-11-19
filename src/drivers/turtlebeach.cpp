@@ -108,7 +108,7 @@ int FrameValue(const std::string& s, const char* key) {
     return (digits > 0 && q < s.size() && s[q] == '"') ? v : -1;
 }
 
-// Stealth Pro II: SInf opener, then the GSI ask; the replies are polled back to back for up to `ms` each.
+// Stealth Pro II: SInf opener, then the GSI ask; the replies are polled back to back until the level shows up.
 int ReadProLevel(const HidColl& c, bool& charging) {
     HidDev d;
     if (!d.Open(c)) return -1;
