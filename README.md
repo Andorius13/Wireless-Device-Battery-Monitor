@@ -504,7 +504,7 @@ Windows releases are built from this repository by GitHub Actions ([`.github/wor
 and signed only after a person approves the signing request. Builds of forks and of unreviewed changes are never signed.
 
 **Team roles**
-- **Committers and reviewers:** [@krisgfx9](https://github.com/krisgfx9), the project owner. Every pull request from other contributors is reviewed by the owner before it is merged.
+- **Committers and reviewers:** [@krisgfx9](https://github.com/krisgfx9) and [@DuBistMutig](https://github.com/DuBistMutig), the code owners in [`.github/CODEOWNERS`](.github/CODEOWNERS). Every pull request from other contributors is reviewed by one of them before it is merged; changes to the build, installer and release scripts need the owner's review.
 - **Approvers:** [@krisgfx9](https://github.com/krisgfx9), the project owner, approves each release before it is signed.
 
 **Privacy:** this program only connects to other systems as described in the [privacy policy](PRIVACY.md): an update check
